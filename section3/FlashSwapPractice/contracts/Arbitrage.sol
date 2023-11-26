@@ -8,6 +8,15 @@ import { IUniswapV2Callee } from "v2-core/interfaces/IUniswapV2Callee.sol";
 
 // This is a practice contract for flash swap arbitrage
 contract Arbitrage is IUniswapV2Callee, Ownable {
+    struct CallbackData {
+        address borrowPool;
+        address targetSwapPool;
+        address borrowToken;
+        address debtToken;
+        uint256 borrowAmount;
+        uint256 debtAmount;
+        uint256 debtAmountOut;
+    }
 
     //
     // EXTERNAL NON-VIEW ONLY OWNER
@@ -27,7 +36,18 @@ contract Arbitrage is IUniswapV2Callee, Ownable {
     //
 
     function uniswapV2Call(address sender, uint256 amount0, uint256 amount1, bytes calldata data) external override {
-        // TODO
+        // 3. decode callback data
+        CallbackData memory callbackData = abi.decode(data, (CallbackData));
+
+        require(msg.sender == callbackData.borrowPool, "Sender must be borrow pool");
+        require(sender == address(this), "Sender must be this contract");
+        require(amount0 > 0 || amount1 > 0, "amount0 or amount1 must be greater than 0");
+
+        // 4. swap WETH to USDC
+        IERC20(callbackData.borrowToken).transfer(callbackData.targetSwapPool, callbackData.borrowAmount);
+        IUniswapV2Pair(callbackData.targetSwapPool).swap(0, callbackData.debtAmountOut, address(this), new bytes(0));
+        // 5. repay USDC to lower price pool
+        IERC20(callbackData.debtToken).transfer(callbackData.borrowPool, callbackData.debtAmount);
     }
 
     // Method 1 is
@@ -40,7 +60,20 @@ contract Arbitrage is IUniswapV2Callee, Ownable {
     //  - repay WETH to higher pool
     // for testing convenient, we implement the method 1 here
     function arbitrage(address priceLowerPool, address priceHigherPool, uint256 borrowETH) external {
-        // TODO
+        // 1. finish callbackData
+        (uint256 lowReserve0, uint256 lowReserve1, ) = IUniswapV2Pair(priceLowerPool).getReserves();
+        (uint256 highReserve0, uint256 highReserve1, ) = IUniswapV2Pair(priceHigherPool).getReserves();
+        CallbackData memory callbackData;
+        callbackData.borrowPool = priceLowerPool;
+        callbackData.targetSwapPool = priceHigherPool;
+        callbackData.borrowToken = IUniswapV2Pair(priceLowerPool).token0();
+        callbackData.debtToken = IUniswapV2Pair(priceLowerPool).token1();
+        callbackData.borrowAmount = borrowETH;
+        callbackData.debtAmount = _getAmountIn(borrowETH, lowReserve1, lowReserve0);
+        callbackData.debtAmountOut = _getAmountOut(borrowETH, highReserve0, highReserve1);
+
+        // 2. flash swap (borrow WETH from lower price pool)
+        IUniswapV2Pair(priceLowerPool).swap(borrowETH, 0, address(this), abi.encode(callbackData));
     }
 
     //
